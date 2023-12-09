@@ -340,7 +340,7 @@ int convolution(int x, int y, padding_image_t *paddingImage, kernel_t *kernel)
 }
 
 /*======================================================================
- * フィルタリング(Prewittフィルタ+(2))
+ * フィルタリング(Prewittフィルタ+(3))
  *======================================================================
  */
 void filteringImage(image_t *resultImage, image_t *originalImage)
@@ -363,12 +363,12 @@ void filteringImage(image_t *resultImage, image_t *originalImage)
     /* データのセット */
     int kernel_x_data[] = {
         -1, 0, 1,
-        -1, 0, 1,
+        -2, 0, 2,
         -1, 0, 1};
     int kernel_y_data[] = {
-        -1, -1, -1,
+        -1, -2, -1,
         0, 0, 0,
-        1, 1, 1};
+        1, 2, 1};
     for (int i = 0; i < kernel_width * kernel_height; i++)
     {
         kernel_x.data[i] = kernel_x_data[i];
@@ -408,7 +408,7 @@ void filteringImage(image_t *resultImage, image_t *originalImage)
             dfdx = convolution(x, y, &paddingImage, &kernel_x);
             dfdy = convolution(x, y, &paddingImage, &kernel_y);
             /* TODO: 255できっちゃいけない気がする。maxValueを使って何かできそう。 */
-            resultImage->data[x + resultImage->width * y] = min(255, sqrt(dfdx * dfdx + dfdy * dfdy));
+            resultImage->data[x + resultImage->width * y] = min(255, abs(dfdx) + abs(dfdy));
         }
     }
 

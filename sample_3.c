@@ -340,7 +340,7 @@ int convolution(int x, int y, padding_image_t *paddingImage, kernel_t *kernel)
 }
 
 /*======================================================================
- * フィルタリング(Prewittフィルタ+(2))
+ * フィルタリング(Sobelフィルタ+(3))
  *======================================================================
  */
 void filteringImage(image_t *resultImage, image_t *originalImage)
@@ -363,12 +363,12 @@ void filteringImage(image_t *resultImage, image_t *originalImage)
     /* データのセット */
     int kernel_x_data[] = {
         -1, 0, 1,
-        -1, 0, 1,
+        -2, 0, 2,
         -1, 0, 1};
     int kernel_y_data[] = {
-        -1, -1, -1,
+        -1, -2, -1,
         0, 0, 0,
-        1, 1, 1};
+        1, 2, 1};
     for (int i = 0; i < kernel_width * kernel_height; i++)
     {
         kernel_x.data[i] = kernel_x_data[i];
