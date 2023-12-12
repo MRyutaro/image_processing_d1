@@ -21,6 +21,19 @@ typedef struct
 } image_t;
 
 /*
+ * 画素値データがint型の画像構造体の定義
+ */
+typedef struct
+{
+    int width;           /* 画像の横方向の画素数 */
+    int height;          /* 画像の縦方向の画素数 */
+    int minValue;        /* 画素の値(明るさ)の最小値 */
+    int maxValue;        /* 画素の値(明るさ)の最大値 */
+    unsigned int *data;           /* 画像の画素値データを格納する領域を指す */
+                         /* ポインタ */
+} int_image_t;
+
+/*
  * パディングを加えた画像構造体の定義
  */
 typedef struct
@@ -41,7 +54,7 @@ typedef struct
 {
     int width;           /* カーネルの横方向の画素数 */
     int height;          /* カーネルの縦方向の画素数 */
-    int *data; /* カーネルの画素値データを格納する領域を指す */
+    int *data;           /* カーネルの画素値データを格納する領域を指す */
                          /* ポインタ */
 } kernel_t;
 
@@ -99,9 +112,30 @@ void initImage(image_t *ptImage, int width, int height, int maxValue)
     ptImage->maxValue = maxValue;
 
     /* メモリ領域の確保 */
-    ptImage->data = (unsigned char *)malloc((size_t)(width * height));
+    ptImage->data = (unsigned char *)malloc(sizeof(unsigned char)*(width * height));
 
     if (ptImage->data == NULL) /* メモリ確保ができなかった時はエラー */
+    {
+        fputs("out of memory\n", stderr);
+        exit(1);
+    }
+
+    return;
+}
+
+/*======================================================================
+ * カーネル構造体の初期化
+ *======================================================================
+ */
+void initKernel(kernel_t *ptKernel, int width, int height)
+{
+    ptKernel->width = width;
+    ptKernel->height = height;
+
+    /* メモリ領域の確保 */
+    ptKernel->data = (int *)malloc(sizeof(int)*(width * height));
+
+    if (ptKernel->data == NULL) /* メモリ確保ができなかった時はエラー */
     {
         fputs("out of memory\n", stderr);
         exit(1);
@@ -135,7 +169,7 @@ void initPaddingImage(image_t *originalImage, padding_image_t *ptPaddingImage, i
     ptPaddingImage->padding_y = padding_y;
 
     /* メモリ領域の確保 */
-    ptPaddingImage->data = (unsigned char *)malloc((size_t)(width * height));
+    ptPaddingImage->data = (unsigned char *)malloc(sizeof(unsigned char)*(width * height));
 
     if (ptPaddingImage->data == NULL) /* メモリ確保ができなかった時はエラー */
     {
@@ -147,18 +181,20 @@ void initPaddingImage(image_t *originalImage, padding_image_t *ptPaddingImage, i
 }
 
 /*======================================================================
- * カーネル構造体の初期化
+ * int型画像構造体の初期化
  *======================================================================
+ * 画像構造体 int_image_t *ptImage の画素数(width × height)
+ * を設定し、画素値データを格納するのに必要なメモリ領域を確保する。
  */
-void initKernel(kernel_t *ptKernel, int width, int height)
+void initIntImage(int_image_t *ptImage, int width, int height)
 {
-    ptKernel->width = width;
-    ptKernel->height = height;
+    ptImage->width = width;
+    ptImage->height = height;
 
     /* メモリ領域の確保 */
-    ptKernel->data = (int *)malloc((size_t)(width * height));
+    ptImage->data = (unsigned int *)malloc(sizeof(unsigned int)*(width * height));
 
-    if (ptKernel->data == NULL) /* メモリ確保ができなかった時はエラー */
+    if (ptImage->data == NULL) /* メモリ確保ができなかった時はエラー */
     {
         fputs("out of memory\n", stderr);
         exit(1);
@@ -340,13 +376,60 @@ int convolution(int x, int y, padding_image_t *paddingImage, kernel_t *kernel)
 }
 
 /*======================================================================
+ * [0, 255]に正規化した画像データのセット
+ *======================================================================
+ */
+void setNormalizedImageData(int_image_t *tmpImage, image_t *resultImage)
+{
+    /* サイズが違ったらエラー */
+    if (tmpImage->width != resultImage->width || tmpImage->height != resultImage->height)
+    {
+        fputs("tmpImage and resultImage are different size\n", stderr);
+        exit(1);
+    }
+
+    int tmp_image_width = tmpImage->width;
+    int tmp_image_height = tmpImage->height;
+    int tmp_image_minValue = tmpImage->minValue;
+    int tmp_image_maxValue = tmpImage->maxValue;
+    int result_image_maxValue = resultImage->maxValue;
+
+    printf("tmp_image: minValue=%d, maxValue=%d\n", tmp_image_minValue, tmp_image_maxValue);
+
+    /* データのセット */
+    for (int y = 0; y < tmp_image_height; y++)
+    {
+        for (int x = 0; x < tmp_image_width; x++)
+        {
+            int tmp_image_pixel = tmpImage->data[x + tmp_image_width * y];
+            /* x'=255*(x-min)/(max-min) (x'の範囲[0, 255]) */
+            int result_image_pixel = (int)(((double)(tmp_image_pixel - tmp_image_minValue) / (double)(tmp_image_maxValue - tmp_image_minValue)) * (double)result_image_maxValue);
+            resultImage->data[x + tmp_image_width * y] = result_image_pixel;
+        }
+    }
+
+    return;
+}
+
+/*======================================================================
  * フィルタリング(Prewittフィルタ+(3))
  *======================================================================
  */
 void filteringImage(image_t *resultImage, image_t *originalImage)
 {
+    /* サイズが違ったらエラー */
+    if (resultImage->width != originalImage->width || resultImage->height != originalImage->height)
+    {
+        fputs("resultImage and originalImage are different size\n", stderr);
+        exit(1);
+    }
+
     kernel_t kernel_x, kernel_y;
     padding_image_t paddingImage;
+    int_image_t tmpImage;
+
+    int original_image_width = originalImage->width;
+    int original_image_height = originalImage->height;
 
     /* フィルタ */
     int kernel_width = 3;
@@ -374,7 +457,6 @@ void filteringImage(image_t *resultImage, image_t *originalImage)
         kernel_x.data[i] = kernel_x_data[i];
         kernel_y.data[i] = kernel_y_data[i];
     }
-
     /* 偶数ならエラー */
     if (kernel_width % 2 == 0 || kernel_height % 2 == 0)
     {
@@ -387,33 +469,58 @@ void filteringImage(image_t *resultImage, image_t *originalImage)
     /* パディングを加えた画像のデータのセット */
     setPaddingImageData(originalImage, &paddingImage, kernel_width, kernel_height);
 
+    /* 値がint型のtmpImageの初期化 */
+    initIntImage(&tmpImage, original_image_width, original_image_height);
+
     /* 各要素の確認 */
-    printf("original_image: width=%d, height=%d, maxValue=%d\n", originalImage->width, originalImage->height, originalImage->maxValue);
-    printf("result_image: width=%d, height=%d, maxValue=%d\n", resultImage->width, resultImage->height, resultImage->maxValue);
-    printf("padding_image: width=%d, height=%d, maxValue=%d, padding_x=%d, padding_y=%d\n", paddingImage.width, paddingImage.height, paddingImage.maxValue, paddingImage.padding_x, paddingImage.padding_y);
+    printf("original_image: width=%d, height=%d, maxValue=%d\n", original_image_width, original_image_height, originalImage->maxValue);
     printf("kernel_x: width=%d, height=%d\n", kernel_x.width, kernel_x.height);
     printf("kernel_y: width=%d, height=%d\n", kernel_y.width, kernel_y.height);
+    printf("padding_image: width=%d, height=%d, maxValue=%d, padding_x=%d, padding_y=%d\n", paddingImage.width, paddingImage.height, paddingImage.maxValue, paddingImage.padding_x, paddingImage.padding_y);
+    printf("tmp_image: width=%d, height=%d\n", tmpImage.width, tmpImage.height);
+    printf("result_image_before: width=%d, height=%d, maxValue=%d\n", resultImage->width, resultImage->height, resultImage->maxValue);
 
     int padding_x = paddingImage.padding_x;
     int padding_y = paddingImage.padding_y;
-    int original_image_width = originalImage->width;
-    int original_image_height = originalImage->height;
 
+    int tmp_image_minValue = 255;
+    int tmp_image_maxValue = 0;
+
+    /* フィルタリング */
     for (int y = padding_y; y < original_image_height + padding_y; y++)
     {
         for (int x = padding_x; x < original_image_width + padding_x; x++)
         {
-            int dfdx, dfdy;
             /* 畳み込み演算 */
-            dfdx = convolution(x, y, &paddingImage, &kernel_x);
-            dfdy = convolution(x, y, &paddingImage, &kernel_y);
-            /* TODO: 255できっちゃいけない気がする。maxValueを使って何かできそう。 */
-            resultImage->data[x + resultImage->width * y] = min(255, abs(dfdx) + abs(dfdy));
+            int dfdx = convolution(x, y, &paddingImage, &kernel_x);
+            int dfdy = convolution(x, y, &paddingImage, &kernel_y);
+            unsigned int g = abs(dfdx) + abs(dfdy);
+
+            /* データのセット */
+            tmpImage.data[(x - padding_x) + original_image_width * (y - padding_y)] = (unsigned int)g;
+
+            /* 最小値の更新 */
+            if (tmp_image_minValue > g)
+            {
+                tmp_image_minValue = g;
+            }
+            /* 最大値の更新 */
+            if (tmp_image_maxValue < g)
+            {
+                tmp_image_maxValue = g;
+            }
         }
     }
 
+    /* tmpImageの最小値をセット */
+    tmpImage.minValue = tmp_image_minValue;
+    /* tmpImageの最大値をセット */
+    tmpImage.maxValue = tmp_image_maxValue;
+    /* [0, 255]に正規化したものをresultImageにセット */
+    setNormalizedImageData(&tmpImage, resultImage);
+
     /* 計算結果の確認 */
-    printf("result_image: width=%d, height=%d, maxValue=%d\n", resultImage->width, resultImage->height, resultImage->maxValue);
+    printf("result_image_after: width=%d, height=%d, maxValue=%d\n", resultImage->width, resultImage->height, resultImage->maxValue);
 
     return;
 }
