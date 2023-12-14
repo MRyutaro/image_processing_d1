@@ -287,6 +287,8 @@ void binarization(image_t *resultImage, image_t *originalImage)
     int threshold = getThreshold(originalImage);
     int N = originalImage->width * originalImage->height;
 
+    printf("threshold = %d\n", threshold);
+
     // 2値化
     for (int i = 0; i < N; i++)
     {
